@@ -46,7 +46,7 @@ argparser.add_argument("--routing", default="em",
   help="rba, em")
 
 # Dataset properties
-argparser.add_argument("--dataset_size", default=10000, type=int, 
+argparser.add_argument("--dataset_size", default=4096, type=int, 
   help="Size of training set")
 
 args = argparser.parse_args()
@@ -73,13 +73,9 @@ def train(train_ds, learning_rate, layers, use_bias):
   """ Train capsule networks mirrored on multiple gpu's
   """
 
-  # Run training for multiple epochs mirrored on multiple gpus
-  train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-
   # Initialize
   model = SignCapsNet(routing=args.routing, layers=layers, use_bias=use_bias)
   optimizer = optimizers.Adam(learning_rate=learning_rate)
-  checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
   
   # Function for a single training step
   def train_step(inputs):
@@ -90,76 +86,85 @@ def train(train_ds, learning_rate, layers, use_bias):
     
     grads = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
-    train_accuracy.update_state(y, logits)
     acc = compute_accuracy(logits, y)
-    return loss
+    return loss, acc
+  
+  def test_step(inputs):
+    x, y = inputs
+    logits = model(x, y)
+    acc = compute_accuracy(logits, y)
+    return acc
 
   if args.enable_tf_function:
     train_step = tf.function(train_step)
+    test_step = tf.function(test_step)
 
   ########################################
-  # Training loop
+  # Training
   ########################################
   step = 0
-  max_train_accuracy = 0
   for epoch in range(args.epochs):
     for data in train_ds:
-      # Training step
-      start = time.time()
-      train_loss = train_step(data) 
-
-      if(step == 0 and args.logging):
-        model.summary() 
+      loss, acc = train_step(data) 
 
       # Logging
-      if step % 100 == 0:
-        time_per_step = (time.time()-start) * 1000 / 100
-        max_train_accuracy = train_accuracy.result() if train_accuracy.result() > max_train_accuracy else max_train_accuracy
+      if args.logging:
+        print("TRAIN | epoch %d (%d): acc=%.2f, loss=%.6f" % 
+          (epoch, acc, loss), 
+          flush=True)   
 
-        if args.logging:
-          print("TRAIN | epoch %d (%d): acc=%.2f, max. acc=%.2f, loss=%.6f | Time per step[ms]: %.2f" % 
-            (epoch, step, train_accuracy.result(), max_train_accuracy, train_loss, time_per_step), flush=True)     
-
-        start = time.time()
-        train_accuracy.reset_states()
-
-      step += 1
-  return max_train_accuracy
+  ########################################
+  # Evaluate accuracy for all datapoints
+  ########################################
+  acc = np.mean([test_step(data) for data in train_ds])
+  return acc
 
 
 #
 # M A I N
 #
 def main():
+
   # Load data
   train_ds = create_sign_data(
     batch_size = args.batch_size,
     dataset_size = args.dataset_size)
 
-  #
-  # Train many capsule networks
-  #
+  ########################################
+  # Architecture & hyperparameter search
+  ########################################
   executions = []
   total_solved = 0
-  num_retries = 3
   for lr in [0.001, 0.005, 0.01]:
-    for num_hidden_layers in [1,2,3,4,5]:
-      for num_caps in [5,10,15,20]:
-        for caps_dim in [5,10,15,20]:
+    for num_hidden_layers in [3,2,1]:
+      for num_caps in [30,25,20,15,10,5]:
+        for caps_dim in [30,25,20,15]:
+          
+          # Using the current architecture we try 3x if we can solve the problem
+          num_retries = 3
           for i in range(num_retries):
+
+            # Create architecture
             layers = [(num_caps, caps_dim) for i in range(num_hidden_layers)]
+
+            # Train network
             acc = train(
               train_ds, 
               learning_rate=lr, 
               layers=layers, 
               use_bias=args.use_bias)
 
-            executions.append(acc)
+            # Evaluate solution
             solved = bool(acc > 0.6)
             total_solved += int(solved)
-
             print("lr=%.5f, num_layers=%d, num_caps=%d, caps_dim=%d | acc=%.3f | solved = %s" % (lr, 
               num_hidden_layers+1, num_caps, caps_dim, acc, solved), flush=True)
+            
+            if solved:
+              break
+          
+          # Add accuracy of solved / not solved execution
+          executions.append(acc)
   
   #
   # Log results

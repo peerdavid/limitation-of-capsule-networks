@@ -3,6 +3,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow import keras
 from random import random
+from sklearn.utils import shuffle
 
 
 def create_sign_data(batch_size, dataset_size=60000):
@@ -15,7 +16,8 @@ def create_sign_data(batch_size, dataset_size=60000):
         train_labels.append(1)
         x += 1.0 / float(dataset_size / 2)
 
+    train_x, train_labels = shuffle(train_x, train_labels)
     dataset_size = len(train_x)
     train_ds = tf.data.Dataset.from_tensor_slices((train_x, train_labels))
-    train_ds = train_ds.shuffle(dataset_size).batch(batch_size)
+    train_ds = train_ds.shuffle(dataset_size).batch(batch_size, drop_remainder=True)
     return train_ds
