@@ -23,6 +23,7 @@ from capsule.capsule_network import CapsNet
 from capsule.utils import margin_loss
 from data.mnist import create_mnist
 from data.fashion_mnist import create_fashion_mnist
+from data.cifar import create_cifar
 
 
 #
@@ -31,11 +32,11 @@ from data.fashion_mnist import create_fashion_mnist
 argparser = argparse.ArgumentParser(description="Show limitations of capsule networks")
 argparser.add_argument("--learning_rate", default=0.0001, type=float, 
   help="Learning rate of adam")
-argparser.add_argument("--reconstruction_weight", default=0.0005, type=float, 
+argparser.add_argument("--reconstruction_weight", default=0.0001, type=float, 
   help="Learning rate of adam")
 argparser.add_argument("--log_dir", default="experiments/tmp", 
   help="Learning rate of adam")    
-argparser.add_argument("--batch_size", default=256, type=int, 
+argparser.add_argument("--batch_size", default=64, type=int, 
   help="Learning rate of adam")
 argparser.add_argument("--enable_tf_function", default=True, type=bool, 
   help="Enable tf.function for faster execution")
@@ -49,8 +50,8 @@ argparser.add_argument("--test", default=True, type=bool,
   help="Run tests after each epoch?")
 
 # Architecture
-argparser.add_argument("--dataset", default="mnist",
-  help="mnist, fashion_mnist")
+argparser.add_argument("--dataset", default="cifar",
+  help="mnist, fashion_mnist, cifar")
 argparser.add_argument("--routing", default="rba",
   help="rba, em")
 argparser.add_argument("--layers", default="32,16,16,10",
@@ -60,7 +61,7 @@ argparser.add_argument("--dimensions", default="8,12,12,16",
 
 # Load hyperparameters from cmd args and update with json file
 args = argparser.parse_args()
-
+args.img_dim = 1 if args.dataset=="mnist" or args.dataset=="fashion_mnist" else 3
 
 def compute_loss(logits, y, reconstruction, x):
   """ The loss is the sum of the margin loss and the reconstruction loss 
@@ -110,7 +111,7 @@ def train(train_ds, test_ds, class_names):
     dimensions = list(map(int, args.dimensions.split(","))) if args.dimensions != "" else []
 
     model = CapsNet(routing=args.routing, layers=layers, dimensions=dimensions, 
-      use_bias=args.use_bias, use_reconstruction=args.use_reconstruction)
+      img_dim=args.img_dim, use_bias=args.use_bias, use_reconstruction=args.use_reconstruction)
     optimizer = optimizers.Adam(learning_rate=args.learning_rate)
     checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
 
@@ -146,10 +147,10 @@ def train(train_ds, test_ds, class_names):
 
     # Define functions for distributed training
     def distributed_train_step(dataset_inputs):
-      return strategy.experimental_run_v2(train_step, args=(dataset_inputs,))
+      return strategy.run(train_step, args=(dataset_inputs,))
 
     def distributed_test_step(dataset_inputs):
-      return strategy.experimental_run_v2(test_step, args=(dataset_inputs, ))
+      return strategy.run(test_step, args=(dataset_inputs, ))
     
     if args.enable_tf_function:
       distributed_train_step = tf.function(distributed_train_step)
@@ -166,7 +167,10 @@ def train(train_ds, test_ds, class_names):
         for data in test_ds:
           distr_cm = distributed_test_step(data)
           for r in range(num_replicas):
-            cm += distr_cm.values[r]
+            if num_replicas > 1:
+              cm += distr_cm.values[r]
+            else:
+              cm += distr_cm
 
         # Log test results (for replica 0 only for activation map and reconstruction)
         figure = utils.plot_confusion_matrix(cm.numpy(), class_names)
@@ -189,7 +193,7 @@ def train(train_ds, test_ds, class_names):
       for data in batch_train_ds:
         start = time.time()
         distr_loss, distr_imgs = distributed_train_step(data)
-        train_loss = tf.reduce_mean(distr_loss.values)
+        train_loss = tf.reduce_mean(distr_loss.values) if num_replicas > 1 else distr_loss
 
         # Logging
         if step % 100 == 0:
@@ -199,10 +203,10 @@ def train(train_ds, test_ds, class_names):
 
           # Create some recon tensorboard images (only GPU 0)
           if args.use_reconstruction:
-            x, recon_x = distr_imgs[0].values[0], distr_imgs[1].values[0]
-            recon_x = tf.reshape(recon_x, [-1, tf.shape(x)[1], tf.shape(x)[2]])  
+            x = distr_imgs[0].values[0] if num_replicas > 1 else distr_imgs[0]
+            recon_x = distr_imgs[1].values[0] if num_replicas > 1 else distr_imgs[1]
+            recon_x = tf.reshape(recon_x, [-1, tf.shape(x)[1], tf.shape(x)[2], args.img_dim])  
             img = tf.concat([x, recon_x], axis=1)
-            img = tf.expand_dims(img, -1)
             with train_writer.as_default():
               tf.summary.image(
                 "X & XAdv & Recon",
@@ -250,8 +254,12 @@ def main():
   # Load data
   if args.dataset=="mnist":
     train_ds, test_ds, class_names = create_mnist(args.batch_size)
-  else:
+  elif args.dataset=="fashion_mnist":
     train_ds, test_ds, class_names = create_fashion_mnist(args.batch_size)
+  elif args.dataset=="cifar":
+    train_ds, test_ds, class_names = create_cifar(args.batch_size)
+  else:
+    raise Exception("Unknown datastet %s." % args.dataset)
 
   # Train capsule network
   train(train_ds, test_ds, class_names)

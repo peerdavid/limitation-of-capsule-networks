@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 class ReconstructionNetwork(tf.keras.Model):
 
-    def __init__(self, in_capsules, in_dim, name="", out_dim=28):
+    def __init__(self, in_capsules, in_dim, name="", out_dim=28, img_dim=1):
         super(ReconstructionNetwork, self).__init__(name=name)
 
         self.in_capsules = in_capsules
@@ -22,7 +22,7 @@ class ReconstructionNetwork(tf.keras.Model):
         self.flatten = layers.Flatten()
         self.fc1 = layers.Dense(512, name="fc1", activation=tf.nn.relu)
         self.fc2 = layers.Dense(1024, name="fc2", activation=tf.nn.relu)
-        self.fc3 = layers.Dense(out_dim * out_dim, name="fc3", activation=tf.sigmoid)
+        self.fc3 = layers.Dense(out_dim * out_dim * img_dim, name="fc3", activation=tf.sigmoid)
 
 
     def call(self, x, y):

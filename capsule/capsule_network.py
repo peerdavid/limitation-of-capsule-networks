@@ -11,7 +11,7 @@ from capsule.norm_layer import Norm
 
 class CapsNet(tf.keras.Model):
 
-    def __init__(self, routing, layers, dimensions, use_bias=False, use_reconstruction=True):
+    def __init__(self, routing, layers, dimensions, img_dim=1, use_bias=False, use_reconstruction=True):
         super(CapsNet, self).__init__()
 
         CapsuleType = {
@@ -24,7 +24,7 @@ class CapsNet(tf.keras.Model):
         self.num_classes = layers[-1]
 
         with tf.name_scope(self.name):
-            self.reshape = tf.keras.layers.Reshape(target_shape=[28, 28, 1], input_shape=(28, 28,))
+            self.reshape = tf.keras.layers.Reshape(target_shape=[28, 28, img_dim], input_shape=(28, 28,))
 
             channels = layers[0]
             dim = dimensions[0]
@@ -47,7 +47,8 @@ class CapsNet(tf.keras.Model):
                 self.reconstruction_network = ReconstructionNetwork(
                     name="ReconstructionNetwork",
                     in_capsules=self.num_classes, 
-                    in_dim=dimensions[-1])
+                    in_dim=dimensions[-1],
+                    img_dim=img_dim)
             self.norm = Norm()
 
 

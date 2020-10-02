@@ -4,7 +4,6 @@ import tensorflow as tf
 from capsule.capsule_layer import Capsule
 from capsule.em_capsule_layer import EMCapsule
 from capsule.primary_capsule_layer import PrimaryCapsule
-from capsule.reconstruction_network import ReconstructionNetwork
 from capsule.norm_layer import Norm
 
 layers = tf.keras.layers
