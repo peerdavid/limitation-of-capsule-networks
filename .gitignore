@@ -3,7 +3,7 @@ cluster_setup.py
 .vscode/
 experiments/
 scripts/slurm
-
+*.out
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

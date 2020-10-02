@@ -143,9 +143,9 @@ def main():
   total_solved = 0
   num_retries = 3
   for lr in [0.001, 0.005, 0.01]:
-    for num_hidden_layers in [1,2,5,10]:
+    for num_hidden_layers in [1,2,3,4,5]:
       for num_caps in [5,10,15,20]:
-        for caps_dim in [2,5,10,20]:
+        for caps_dim in [5,10,15,20]:
           for i in range(num_retries):
             layers = [(num_caps, caps_dim) for i in range(num_hidden_layers)]
             acc = train(
@@ -159,18 +159,18 @@ def main():
             total_solved += int(solved)
 
             print("lr=%.5f, num_layers=%d, num_caps=%d, caps_dim=%d | acc=%.3f | solved = %s" % (lr, 
-              num_hidden_layers+1, num_caps, caps_dim, acc, solved))
+              num_hidden_layers+1, num_caps, caps_dim, acc, solved), flush=True)
   
   #
   # Log results
   #  
-  print("\n==========================")
-  print("Accuracy | Num solved")
-  print("==========================")
+  print("\n==========================", flush=True)
+  print("Accuracy | Num solved", flush=True)
+  print("==========================", flush=True)
   for b in [0.5, 0.6, 0.7, 0.8, 0.9]:
     num_solved = np.sum([1 if e > b else 0 for e in executions])
     log = "> %.2f | %d" % (b, num_solved)
-    print(log)
+    print(log, flush=True)
 
     file_name = "experiments/routing_%s_bias_%s.txt" % (args.routing, args.use_bias)
     with open(file_name, 'a') as f:
