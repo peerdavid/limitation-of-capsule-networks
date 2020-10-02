@@ -2,6 +2,7 @@ env/
 cluster_setup.py
 .vscode/
 experiments/
+scripts/slurm
 
 
 # Byte-compiled / optimized / DLL files
