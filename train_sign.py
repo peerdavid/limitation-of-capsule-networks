@@ -30,25 +30,23 @@ from data.sign import create_sign_data
 #
 # Learning hyperparameters
 argparser = argparse.ArgumentParser(description="Show limitations of capsule networks")
-argparser.add_argument("--learning_rate", default=0.005, type=float, 
-  help="Learning rate of adam")
 argparser.add_argument("--batch_size", default=256, type=int, 
   help="Learning rate of adam")
-argparser.add_argument("--epochs", default=50, type=int, 
-  help="Defines the number of epochs to train the network")
-argparser.add_argument("--log_dir", default="experiments/robust", 
-  help="Learning rate of adam")    
+argparser.add_argument("--epochs", default=10, type=int, 
+  help="Defines the number of epochs to train the network") 
 argparser.add_argument("--enable_tf_function", default=True, type=bool, 
   help="Enable tf.function for faster execution")
+argparser.add_argument("--use_bias", default=False, type=bool, 
+  help="Add a bias term to the preactivation")
+argparser.add_argument("--logging", default=False, type=bool, 
+  help="Detailed logging")
 
 # Routing properties
 argparser.add_argument("--routing", default="em",
   help="rba, em")
-argparser.add_argument("--use_bias", default=False, type=bool, 
-  help="Add a bias term to the preactivation")
 
 # Dataset properties
-argparser.add_argument("--dataset_size", default=20000, type=int, 
+argparser.add_argument("--dataset_size", default=10000, type=int, 
   help="Size of training set")
 
 args = argparser.parse_args()
@@ -71,95 +69,114 @@ def compute_accuracy(logits, labels):
     return tf.reduce_mean(tf.cast(tf.equal(predictions, labels), tf.float32))
 
 
-def train(train_ds):
+def train(train_ds, learning_rate, layers, use_bias):
   """ Train capsule networks mirrored on multiple gpu's
   """
 
   # Run training for multiple epochs mirrored on multiple gpus
-  strategy = tf.distribute.MirroredStrategy()
-  train_ds = strategy.experimental_distribute_dataset(train_ds)
   train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
 
-  # Create a checkpoint directory to store the checkpoints.
-  ckpt_dir = os.path.join(args.log_dir, "ckpt/", "ckpt")
-  train_writer = tf.summary.create_file_writer("%s/log/train" % args.log_dir)
-
-  with strategy.scope():
-    model = SignCapsNet(routing=args.routing, layers=[20, 2], use_bias=args.use_bias)
-    optimizer = optimizers.Adam(learning_rate=args.learning_rate)
-    checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
+  # Initialize
+  model = SignCapsNet(routing=args.routing, layers=layers, use_bias=use_bias)
+  optimizer = optimizers.Adam(learning_rate=learning_rate)
+  checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
+  
+  # Function for a single training step
+  def train_step(inputs):
+    x, y = inputs
+    with tf.GradientTape() as tape:
+      logits = model(x, y)
+      loss = compute_loss(logits, y)
     
-    # Function for a single training step
-    def train_step(inputs):
-      x, y = inputs
-      with tf.GradientTape() as tape:
-        logits = model(x, y)
-        loss = compute_loss(logits, y)
-      
-      grads = tape.gradient(loss, model.trainable_variables)
-      optimizer.apply_gradients(zip(grads, model.trainable_variables))
-      train_accuracy.update_state(y, logits)
-      acc = compute_accuracy(logits, y)
-      
-      return loss
+    grads = tape.gradient(loss, model.trainable_variables)
+    optimizer.apply_gradients(zip(grads, model.trainable_variables))
+    train_accuracy.update_state(y, logits)
+    acc = compute_accuracy(logits, y)
+    return loss
 
-    # Define functions for distributed training
-    def distributed_train_step(dataset_inputs):
-      return strategy.experimental_run_v2(train_step, args=(dataset_inputs,))
+  if args.enable_tf_function:
+    train_step = tf.function(train_step)
 
-    if args.enable_tf_function:
-      distributed_train_step = tf.function(distributed_train_step)
+  ########################################
+  # Training loop
+  ########################################
+  step = 0
+  max_train_accuracy = 0
+  for epoch in range(args.epochs):
+    for data in train_ds:
+      # Training step
+      start = time.time()
+      train_loss = train_step(data) 
 
-    ########################################
-    # Train
-    ########################################
-    step = 0
-    for epoch in range(args.epochs):
-      for data in train_ds:
-        # Training step
+      if(step == 0 and args.logging):
+        model.summary() 
+
+      # Logging
+      if step % 100 == 0:
+        time_per_step = (time.time()-start) * 1000 / 100
+        max_train_accuracy = train_accuracy.result() if train_accuracy.result() > max_train_accuracy else max_train_accuracy
+
+        if args.logging:
+          print("TRAIN | epoch %d (%d): acc=%.2f, max. acc=%.2f, loss=%.6f | Time per step[ms]: %.2f" % 
+            (epoch, step, train_accuracy.result(), max_train_accuracy, train_loss, time_per_step), flush=True)     
+
         start = time.time()
-        distr_train_loss = distributed_train_step(data)  
-        train_loss = tf.reduce_mean(distr_train_loss.values)
+        train_accuracy.reset_states()
 
-        # Logging
-        if step % 100 == 0:
-          time_per_step = (time.time()-start) * 1000 / 100
-          print("TRAIN | epoch %d (%d): acc=%.2f, loss=%.6f | Time per step[ms]: %.2f" % 
-              (epoch, step, train_accuracy.result(), train_loss, time_per_step), flush=True)     
-
-          with train_writer.as_default(): 
-            tf.summary.scalar("General/Accuracy", train_accuracy.result(), step=step)
-            tf.summary.scalar("General/Loss", train_loss, step=step)
-
-          start = time.time()
-          train_writer.flush()
-          train_accuracy.reset_states()
-
-        step += 1
-      
-      # Checkpointing
-      if epoch == args.epochs-1:
-        checkpoint.save(ckpt_dir)
+      step += 1
+  return max_train_accuracy
 
 
 #
 # M A I N
 #
 def main():
-  # Write log folder and arguments
-  if not os.path.exists(args.log_dir):
-    os.makedirs(args.log_dir)
-
-  with open("%s/args.txt" % args.log_dir, "w") as file:
-     file.write(json.dumps(vars(args)))
-
   # Load data
   train_ds = create_sign_data(
     batch_size = args.batch_size,
     dataset_size = args.dataset_size)
 
-  # Train capsule network
-  train(train_ds)
+  #
+  # Train many capsule networks
+  #
+  executions = []
+  total_solved = 0
+  num_retries = 3
+  for lr in [0.001, 0.005, 0.01]:
+    for num_hidden_layers in [1,2,5,10]:
+      for num_caps in [5,10,15,20]:
+        for caps_dim in [2,5,10,20]:
+          for i in range(num_retries):
+            layers = [(num_caps, caps_dim) for i in range(num_hidden_layers)]
+            acc = train(
+              train_ds, 
+              learning_rate=lr, 
+              layers=layers, 
+              use_bias=args.use_bias)
+
+            executions.append(acc)
+            solved = bool(acc > 0.6)
+            total_solved += int(solved)
+
+            print("lr=%.5f, num_layers=%d, num_caps=%d, caps_dim=%d | acc=%.3f | solved = %s" % (lr, 
+              num_hidden_layers+1, num_caps, caps_dim, acc, solved))
+  
+  #
+  # Log results
+  #  
+  print("\n==========================")
+  print("Accuracy | Num solved")
+  print("==========================")
+  for b in [0.5, 0.6, 0.7, 0.8, 0.9]:
+    num_solved = np.sum([1 if e > b else 0 for e in executions])
+    log = "> %.2f | %d" % (b, num_solved)
+    print(log)
+
+    file_name = "experiments/routing_%s_bias_%s.txt" % (args.routing, args.use_bias)
+    with open(file_name, 'a') as f:
+      f.write(log)
+
+  print("==========================")
 
 
        

@@ -23,16 +23,31 @@ class SignCapsNet(tf.keras.Model):
         self.use_bias=use_bias
         self.capsule_layers = []
         
+        # Specified through the sign dataset
         in_capsule = 1
-        for num_capsules in  layers:
+        in_dim = 1
+        for i in range(len(layers)):
+            num_capsules = layers[i][0]
+            out_dim = layers[i][1]
             self.capsule_layers.append(
                 CapsuleType[routing](
                     in_capsules=in_capsule, 
-                    in_dim=1, out_capsules=num_capsules, 
-                    out_dim=1, use_bias=self.use_bias,
+                    in_dim=in_dim, out_capsules=num_capsules, 
+                    out_dim=out_dim, use_bias=self.use_bias,
                     stdev=0.5)
             )
             in_capsule = num_capsules 
+            in_dim = out_dim
+        
+        # Output layer
+        self.capsule_layers.append(
+            CapsuleType[routing](
+                in_capsules=in_capsule, 
+                in_dim=in_dim, out_capsules=2, 
+                out_dim=10, 
+                use_bias=self.use_bias,
+                stdev=0.5)
+        )
         
         self.norm = Norm()
 
