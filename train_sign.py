@@ -32,7 +32,7 @@ from data.sign import create_sign_data
 argparser = argparse.ArgumentParser(description="Show limitations of capsule networks")
 argparser.add_argument("--batch_size", default=64, type=int, 
   help="Batch size")
-argparser.add_argument("--epochs", default=10, type=int, 
+argparser.add_argument("--epochs", default=50, type=int, 
   help="Defines the number of epochs to train the network") 
 argparser.add_argument("--enable_tf_function", default=True, type=bool, 
   help="Enable tf.function for faster execution")
@@ -134,7 +134,7 @@ def main():
 
   executions = []
 
-  for num_hidden_layers in [3,2,1]:
+  for num_hidden_layers in [4,3,2,1]:
     for num_caps in [30,25,20,15,10]:
       for caps_dim in [18,16,14,12,10]:
 
