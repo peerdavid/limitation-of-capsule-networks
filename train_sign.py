@@ -69,7 +69,7 @@ def compute_accuracy(logits, labels):
 
 
 def train(train_ds, test_ds, layers, use_bias):
-  """ Train capsule networks mirrored on multiple gpu's
+  """ Train capsule networks mirrored on multiple gpu
   """
 
   # Initialize
