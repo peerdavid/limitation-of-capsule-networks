@@ -12,13 +12,13 @@ WIDTH = 24
 DEPTH = 3
 
 
-def create_cifar(args):
+def create_svhn(args):
     args.img_width = WIDTH
     args.img_height = HEIGHT
     args.img_depth = DEPTH
 
-    train_ds = tfds.load(name="cifar10", split="train", as_supervised=True)
-    test_ds = tfds.load(name="cifar10", split="test", as_supervised=True)
+    train_ds = tfds.load(name="svhn_cropped", split="train", as_supervised=True)
+    test_ds = tfds.load(name="svhn_cropped", split="test", as_supervised=True)
     train_ds = (train_ds
         .map(_augmentation)
         .shuffle(buffer_size=50000)
@@ -38,7 +38,6 @@ def create_cifar(args):
 def _augmentation(x, y):
     x = tf.image.convert_image_dtype(x, tf.float32)
     x = tf.image.random_crop(x, size=[HEIGHT, WIDTH, DEPTH])
-    x = tf.image.random_flip_left_right(x)
     x = tf.image.random_brightness(x, max_delta=0.25)
     return x, y
 

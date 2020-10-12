@@ -19,7 +19,7 @@ class PrimaryCapsule(tf.keras.Model):
             filters=num_filters, 
             kernel_size=kernel_size, 
             strides=strides, 
-            activation=None,
+            kernel_initializer="he_normal",
             padding='valid')
         
         self.reshape = layers.Reshape(target_shape = (-1, dim))

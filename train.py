@@ -24,6 +24,7 @@ from capsule.utils import margin_loss
 from data.mnist import create_mnist
 from data.fashion_mnist import create_fashion_mnist
 from data.cifar import create_cifar
+from data.svhn import create_svhn
 
 
 #
@@ -32,12 +33,12 @@ from data.cifar import create_cifar
 argparser = argparse.ArgumentParser(description="Show limitations of capsule networks")
 argparser.add_argument("--learning_rate", default=0.0001, type=float, 
   help="Learning rate of adam")
-argparser.add_argument("--reconstruction_weight", default=0.0001, type=float, 
-  help="Learning rate of adam")
+argparser.add_argument("--reconstruction_weight", default=0.00005, type=float, 
+  help="Loss of reconstructions")
 argparser.add_argument("--log_dir", default="experiments/tmp", 
-  help="Learning rate of adam")    
-argparser.add_argument("--batch_size", default=64, type=int, 
-  help="Learning rate of adam")
+  help="Log dir for tensorbaord")    
+argparser.add_argument("--batch_size", default=128, type=int, 
+  help="Batch size of training data")
 argparser.add_argument("--enable_tf_function", default=True, type=bool, 
   help="Enable tf.function for faster execution")
 argparser.add_argument("--epochs", default=30, type=int, 
@@ -54,14 +55,14 @@ argparser.add_argument("--dataset", default="cifar",
   help="mnist, fashion_mnist, cifar")
 argparser.add_argument("--routing", default="rba",
   help="rba, em")
-argparser.add_argument("--layers", default="32,16,16,10",
+argparser.add_argument("--layers", default="64,10", #"32,16,16,10",
   help=", spereated list of layers. Each number represents the number of hidden units except for the first layer the number of channels.")
-argparser.add_argument("--dimensions", default="8,12,12,16",
+argparser.add_argument("--dimensions", default="8,16", #"8,12,12,16",
   help=", spereated list of layers. Each number represents the dimension of the layer.")
 
 # Load hyperparameters from cmd args and update with json file
 args = argparser.parse_args()
-args.img_dim = 1 if args.dataset=="mnist" or args.dataset=="fashion_mnist" else 3
+
 
 def compute_loss(logits, y, reconstruction, x):
   """ The loss is the sum of the margin loss and the reconstruction loss 
@@ -87,6 +88,12 @@ def compute_loss(logits, y, reconstruction, x):
   return loss, reconstruction_loss
 
 
+def compute_accuracy(logits, labels):
+  predictions = tf.cast(tf.argmax(tf.nn.softmax(logits), axis=1), tf.int32)
+  return tf.reduce_mean(tf.cast(tf.equal(predictions, labels), tf.float32))
+
+
+
 def train(train_ds, test_ds, class_names):
   """ Train capsule networks mirrored on multiple gpu's
   """
@@ -95,9 +102,7 @@ def train(train_ds, test_ds, class_names):
   strategy = tf.distribute.MirroredStrategy()
   num_replicas = strategy.num_replicas_in_sync
 
-  (batch_train_ds, online_train_ds) = train_ds
-  batch_train_ds = strategy.experimental_distribute_dataset(batch_train_ds)
-  online_train_ds = strategy.experimental_distribute_dataset(online_train_ds)
+  train_ds = strategy.experimental_distribute_dataset(train_ds)
   test_ds = strategy.experimental_distribute_dataset(test_ds)
 
   # Create a checkpoint directory to store the checkpoints.
@@ -107,17 +112,16 @@ def train(train_ds, test_ds, class_names):
   test_writer = tf.summary.create_file_writer("%s/log/test" % args.log_dir)
 
   with strategy.scope():
-    layers = list(map(int, args.layers.split(","))) if args.layers != "" else []
-    dimensions = list(map(int, args.dimensions.split(","))) if args.dimensions != "" else []
-
-    model = CapsNet(routing=args.routing, layers=layers, dimensions=dimensions, 
-      img_dim=args.img_dim, use_bias=args.use_bias, use_reconstruction=args.use_reconstruction)
-    optimizer = optimizers.Adam(learning_rate=args.learning_rate)
+    model = CapsNet(args)
+    optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
+    # radam=tfa.optimizers.RectifiedAdam(
+    #         learning_rate=args.learning_rate, 
+    #         epsilon=1e-6,
+    #         weight_decay=1e-2)
+    # optimizer = tfa.optimizers.Lookahead(radam)
     checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
 
     # Define metrics 
-    train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-    test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
     test_loss = tf.keras.metrics.Mean(name='test_loss')
     
     # Function for a single training step
@@ -129,8 +133,9 @@ def train(train_ds, test_ds, class_names):
       
       grads = tape.gradient(loss, model.trainable_variables)
       optimizer.apply_gradients(zip(grads, model.trainable_variables))
-      train_accuracy.update_state(y, logits)
-      return loss, (x, reconstruction)
+      acc = compute_accuracy(logits, y)
+
+      return loss, acc, (x, reconstruction)
 
     # Function for a single test step
     def test_step(inputs):
@@ -138,12 +143,12 @@ def train(train_ds, test_ds, class_names):
       logits, reconstruction, _ = model(x, y)
       loss, _ = compute_loss(logits, y, reconstruction, x)
       
-      test_accuracy.update_state(y, logits)
       test_loss.update_state(loss)
+      acc = compute_accuracy(logits, y)
 
       pred = tf.math.argmax(logits, axis=1)
       cm = tf.math.confusion_matrix(y, pred, num_classes=10)
-      return cm
+      return acc, cm
 
     # Define functions for distributed training
     def distributed_train_step(dataset_inputs):
@@ -158,31 +163,36 @@ def train(train_ds, test_ds, class_names):
 
     # Loop for multiple epochs
     step = 0
+    max_acc = 0.0
     for epoch in range(args.epochs):
       ########################################
       # Test
       ########################################
       if args.test:
         cm = np.zeros((10, 10))
+        test_acc = []
         for data in test_ds:
-          distr_cm = distributed_test_step(data)
+          distr_acc, distr_cm = distributed_test_step(data)
           for r in range(num_replicas):
             if num_replicas > 1:
               cm += distr_cm.values[r]
+              test_acc.append(distr_acc.values[r].numpy())
             else:
               cm += distr_cm
+              test_acc.append(distr_acc)
 
         # Log test results (for replica 0 only for activation map and reconstruction)
+        test_acc = np.mean(test_acc)
+        max_acc = test_acc if test_acc > max_acc else max_acc
         figure = utils.plot_confusion_matrix(cm.numpy(), class_names)
         cm_image = utils.plot_to_image(figure)
         print("TEST | epoch %d (%d): acc=%.4f, loss=%.4f" % 
-              (epoch, step, test_accuracy.result(), test_loss.result()), flush=True)  
+              (epoch, step, test_acc, test_loss.result()), flush=True)  
 
         with test_writer.as_default(): 
           tf.summary.image("Confusion Matrix", cm_image, step=step)
-          tf.summary.scalar("General/Accuracy", test_accuracy.result(), step=step)
+          tf.summary.scalar("General/Accuracy", test_acc, step=step)
           tf.summary.scalar("General/Loss", test_loss.result(), step=step)
-        test_accuracy.reset_states()
         test_loss.reset_states()
         test_writer.flush()
 
@@ -190,38 +200,38 @@ def train(train_ds, test_ds, class_names):
       ########################################
       # Train
       ########################################
-      for data in batch_train_ds:
+      for data in train_ds:
         start = time.time()
-        distr_loss, distr_imgs = distributed_train_step(data)
+        distr_loss, distr_acc, distr_imgs = distributed_train_step(data)
         train_loss = tf.reduce_mean(distr_loss.values) if num_replicas > 1 else distr_loss
+        acc = tf.reduce_mean(distr_acc.values) if num_replicas > 1 else distr_acc
 
         # Logging
         if step % 100 == 0:
           time_per_step = (time.time()-start) * 1000 / 100
           print("TRAIN | epoch %d (%d): acc=%.4f, loss=%.4f | Time per step[ms]: %.2f" % 
-              (epoch, step, train_accuracy.result(), train_loss.numpy(), time_per_step), flush=True)     
+              (epoch, step, acc, train_loss.numpy(), time_per_step), flush=True)     
 
           # Create some recon tensorboard images (only GPU 0)
           if args.use_reconstruction:
             x = distr_imgs[0].values[0] if num_replicas > 1 else distr_imgs[0]
             recon_x = distr_imgs[1].values[0] if num_replicas > 1 else distr_imgs[1]
-            recon_x = tf.reshape(recon_x, [-1, tf.shape(x)[1], tf.shape(x)[2], args.img_dim])  
+            recon_x = tf.reshape(recon_x, [-1, tf.shape(x)[1], tf.shape(x)[2], args.img_depth])  
+            x = tf.reshape(x, [-1, tf.shape(x)[1], tf.shape(x)[2], args.img_depth])  
             img = tf.concat([x, recon_x], axis=1)
             with train_writer.as_default():
               tf.summary.image(
-                "X & XAdv & Recon",
+                "X & Recon",
                 img,
                 step=step,
                 max_outputs=3,)
 
           with train_writer.as_default(): 
             # Write scalars
-            tf.summary.scalar("General/Accuracy", train_accuracy.result(), step=step)
+            tf.summary.scalar("General/Accuracy", acc, step=step)
             tf.summary.scalar("General/Loss", train_loss.numpy(), step=step)
 
-          train_accuracy.reset_states()
           start = time.time()
-
           train_writer.flush()
         
         step += 1
@@ -229,15 +239,19 @@ def train(train_ds, test_ds, class_names):
 
       ####################
       # Checkpointing
-      if epoch % 5 == 0:
-        checkpoint.save(ckpt_dir)
+      #if epoch % 60 == 0:
+      #  checkpoint.save(ckpt_dir)
 
+    return max_acc
 
 
 #
 # M A I N
 #
 def main():
+  print("\n\n###############################################", flush=True)
+  print(args.log_dir, flush=True)
+  print("###############################################\n", flush=True)
   # Configurations for cluster
   physical_devices = tf.config.experimental.list_physical_devices('GPU')
   assert len(physical_devices) > 0, "Not enough GPU hardware devices available"
@@ -253,17 +267,20 @@ def main():
 
   # Load data
   if args.dataset=="mnist":
-    train_ds, test_ds, class_names = create_mnist(args.batch_size)
+    train_ds, test_ds, class_names = create_mnist(args)
   elif args.dataset=="fashion_mnist":
-    train_ds, test_ds, class_names = create_fashion_mnist(args.batch_size)
+    train_ds, test_ds, class_names = create_fashion_mnist(args)
   elif args.dataset=="cifar":
-    train_ds, test_ds, class_names = create_cifar(args.batch_size)
+    train_ds, test_ds, class_names = create_cifar(args)
+  elif args.dataset=="svhn":
+    train_ds, test_ds, class_names = create_svhn(args)
   else:
     raise Exception("Unknown datastet %s." % args.dataset)
 
   # Train capsule network
-  train(train_ds, test_ds, class_names)
-
+  acc = train(train_ds, test_ds, class_names)
+  with open("experiments/results.txt", 'a') as f:
+    f.write("%s;%.5f\n" % (args.log_dir, acc))
 
        
 if __name__ == '__main__':

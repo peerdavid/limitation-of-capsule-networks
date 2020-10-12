@@ -4,6 +4,8 @@ cluster_setup.py
 experiments/
 scripts/slurm
 *.out
+create_graphs.py
+sign_results.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
