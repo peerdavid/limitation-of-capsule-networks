@@ -42,7 +42,9 @@ class CapsNet(tf.keras.Model):
             self.capsule_layers = []
 
             for i in range(1, len(layers)):
-                size = 6*6 if args.img_width == 28 else 4*4
+                size = 6*6 if (args.img_width == 28) else \
+                       8*8 if (args.img_width == 32) else \
+                       4*4
                 self.capsule_layers.append(
                     CapsuleType[routing](
                         name="CapsuleLayer%d" % i,

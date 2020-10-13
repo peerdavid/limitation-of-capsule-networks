@@ -7,8 +7,8 @@ from tensorflow import keras
 
 
 
-HEIGHT = 28
-WIDTH = 28
+HEIGHT = 32
+WIDTH = 32
 DEPTH = 1
 
 
@@ -37,21 +37,22 @@ def create_norb(args):
 
 def _augmentation(x, y):
     x = tf.image.convert_image_dtype(x, tf.float32)
-    x = tf.image.resize_with_pad(x, 42, 42)
+    x = tf.image.resize_with_pad(x, 48, 48)
     x = tf.image.random_crop(x, size=[HEIGHT, WIDTH, DEPTH])
+    #x = tf.image.resize_with_crop_or_pad(x, HEIGHT, WIDTH)
     x = tf.image.random_flip_left_right(x)
-    x = tf.image.random_brightness(x, max_delta=0.1)
+    x = tf.image.random_brightness(x, max_delta=0.01)
     return x, y
 
 
 def _no_augmentation(x, y):
     x = tf.image.convert_image_dtype(x, tf.float32)
-    x = tf.image.resize_with_pad(x, 42, 42)
-    x = tf.image.random_crop(x, size=[HEIGHT, WIDTH, DEPTH])
+    x = tf.image.resize_with_pad(x, 48, 48)
+    x = tf.image.resize_with_crop_or_pad(x, HEIGHT, WIDTH)
     return x, y
 
 
 def _normalize(x, y):
-  x = tf.image.per_image_standardization(x)
+  #x = tf.image.per_image_standardization(x)
   y = tf.cast(y, tf.int32)
   return x, y
