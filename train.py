@@ -24,6 +24,7 @@ from capsule.utils import margin_loss
 from data.mnist import create_mnist
 from data.fashion_mnist import create_fashion_mnist
 from data.cifar import create_cifar
+from data.norb import create_norb
 from data.svhn import create_svhn
 
 
@@ -33,17 +34,17 @@ from data.svhn import create_svhn
 argparser = argparse.ArgumentParser(description="Show limitations of capsule networks")
 argparser.add_argument("--learning_rate", default=0.0001, type=float, 
   help="Learning rate of adam")
-argparser.add_argument("--reconstruction_weight", default=0.00005, type=float, 
+argparser.add_argument("--reconstruction_weight", default=0.00001, type=float, 
   help="Loss of reconstructions")
 argparser.add_argument("--log_dir", default="experiments/tmp", 
   help="Log dir for tensorbaord")    
-argparser.add_argument("--batch_size", default=128, type=int, 
+argparser.add_argument("--batch_size", default=32, type=int, 
   help="Batch size of training data")
 argparser.add_argument("--enable_tf_function", default=True, type=bool, 
   help="Enable tf.function for faster execution")
 argparser.add_argument("--epochs", default=30, type=int, 
   help="Defines the number of epochs to train the network")
-argparser.add_argument("--use_bias", default=False, type=bool, 
+argparser.add_argument("--use_bias", default=True, type=bool, 
   help="Add a bias term to the preactivation")
 argparser.add_argument("--use_reconstruction", default=True, type=bool, 
   help="Use the reconstruction network as regularization loss")
@@ -51,13 +52,13 @@ argparser.add_argument("--test", default=True, type=bool,
   help="Run tests after each epoch?")
 
 # Architecture
-argparser.add_argument("--dataset", default="cifar",
-  help="mnist, fashion_mnist, cifar")
+argparser.add_argument("--dataset", default="norb",
+  help="mnist, fashion_mnist, svhn, norb")
 argparser.add_argument("--routing", default="rba",
   help="rba, em")
-argparser.add_argument("--layers", default="64,10", #"32,16,16,10",
+argparser.add_argument("--layers", default="64,32,5",
   help=", spereated list of layers. Each number represents the number of hidden units except for the first layer the number of channels.")
-argparser.add_argument("--dimensions", default="8,16", #"8,12,12,16",
+argparser.add_argument("--dimensions", default="8,12,16",
   help=", spereated list of layers. Each number represents the dimension of the layer.")
 
 # Load hyperparameters from cmd args and update with json file
@@ -272,6 +273,8 @@ def main():
     train_ds, test_ds, class_names = create_fashion_mnist(args)
   elif args.dataset=="cifar":
     train_ds, test_ds, class_names = create_cifar(args)
+  elif args.dataset=="norb":
+    train_ds, test_ds, class_names = create_norb(args)
   elif args.dataset=="svhn":
     train_ds, test_ds, class_names = create_svhn(args)
   else:
