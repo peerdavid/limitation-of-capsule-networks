@@ -40,7 +40,7 @@ def _augmentation(x, y):
     x = tf.image.resize_with_pad(x, 42, 42)
     x = tf.image.random_crop(x, size=[HEIGHT, WIDTH, DEPTH])
     x = tf.image.random_flip_left_right(x)
-    x = tf.image.random_brightness(x, max_delta=0.25)
+    x = tf.image.random_brightness(x, max_delta=0.1)
     return x, y
 
 
