@@ -11,7 +11,7 @@ models = tf.keras.models
 
 class EMCapsule(tf.keras.Model):
 
-    def __init__(self, in_capsules, in_dim, out_capsules, out_dim, stdev=0.1, routing_iterations=2, name='', use_bias=True):
+    def __init__(self, in_capsules, in_dim, out_capsules, out_dim, stdev=0.2, routing_iterations=2, name='', use_bias=True):
         super(EMCapsule, self).__init__(name=name)
         self.use_bias = use_bias
         self.in_capsules = in_capsules
@@ -34,7 +34,7 @@ class EMCapsule(tf.keras.Model):
                                                     dtype='float32'), trainable=True)
 
             if self.use_bias:
-                bias_init = tf.constant_initializer(0.0)
+                bias_init = tf.constant_initializer(0.1)
                 self.bias = tf.Variable(name="bias", initial_value=bias_init(shape=(1, out_capsules, out_dim),
                                                     dtype='float32'), trainable=True)
     

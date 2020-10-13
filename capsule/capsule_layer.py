@@ -9,7 +9,7 @@ models = tf.keras.models
 
 class Capsule(tf.keras.Model):
 
-    def __init__(self, in_capsules, in_dim, out_capsules, out_dim, stdev=0.1, routing_iterations=2, use_bias=True, name=''):
+    def __init__(self, in_capsules, in_dim, out_capsules, out_dim, stdev=0.2, routing_iterations=2, use_bias=True, name=''):
         super(Capsule, self).__init__(name=name)
         self.in_capsules = in_capsules
         self.in_dim = in_dim
@@ -25,7 +25,7 @@ class Capsule(tf.keras.Model):
                                 trainable=True)
         
             if self.use_bias:
-                bias_init = tf.constant_initializer(0.0)
+                bias_init = tf.constant_initializer(0.1)
                 self.bias = tf.Variable(name="bias", initial_value=bias_init(shape=(1, out_capsules, out_dim),
                                                         dtype='float32'),
                                     trainable=True)
