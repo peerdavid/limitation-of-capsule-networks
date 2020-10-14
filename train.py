@@ -38,13 +38,13 @@ argparser.add_argument("--reconstruction_weight", default=0.00001, type=float,
   help="Loss of reconstructions")
 argparser.add_argument("--log_dir", default="experiments/tmp", 
   help="Log dir for tensorbaord")    
-argparser.add_argument("--batch_size", default=32, type=int, 
+argparser.add_argument("--batch_size", default=128, type=int, 
   help="Batch size of training data")
 argparser.add_argument("--enable_tf_function", default=True, type=bool, 
   help="Enable tf.function for faster execution")
 argparser.add_argument("--epochs", default=30, type=int, 
   help="Defines the number of epochs to train the network")
-argparser.add_argument("--use_bias", default=True, type=bool, 
+argparser.add_argument("--use_bias", default=False, type=bool, 
   help="Add a bias term to the preactivation")
 argparser.add_argument("--use_reconstruction", default=True, type=bool, 
   help="Use the reconstruction network as regularization loss")
