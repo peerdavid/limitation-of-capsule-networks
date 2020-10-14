@@ -44,7 +44,7 @@ def _augmentation(x, y):
 
 def _no_augmentation(x, y):
     x = tf.image.convert_image_dtype(x, tf.float32)
-    x = tf.image.random_crop(x, size=[HEIGHT, WIDTH, DEPTH])
+    x = tf.image.resize_with_crop_or_pad(x, HEIGHT, WIDTH)
     return x, y
 
 
