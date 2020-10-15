@@ -49,6 +49,6 @@ def _no_augmentation(x, y):
 
 
 def _normalize(x, y):
-  x = tf.image.per_image_standardization(x)
-  y = tf.cast(y, tf.int32)
-  return x, y
+    x = tf.image.per_image_standardization(x)
+    y = tf.cast(y, tf.int32)
+    return x, y

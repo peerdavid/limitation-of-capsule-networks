@@ -2,33 +2,53 @@
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
+import tensorflow_datasets as tfds
 from tensorflow import keras
 
 
 
+HEIGHT = 24
+WIDTH = 24
+DEPTH = 1
+
+
 def create_fashion_mnist(args):
-    args.img_width = 28
-    args.img_height = 28
-    args.img_depth = 1
+    args.img_width = WIDTH
+    args.img_height = HEIGHT
+    args.img_depth = DEPTH
 
-    (train_images, train_labels), (test_images, test_labels) = keras.datasets.fashion_mnist.load_data()
-    train_images = train_images.astype(np.float32)
-    train_images = train_images / 255.0
-    train_images = tf.expand_dims(train_images, axis=-1)
-    train_images = tf.image.per_image_standardization(train_images)
+    train_ds = tfds.load(name="fashion_mnist", split="train", as_supervised=True)
+    test_ds = tfds.load(name="fashion_mnist", split="test", as_supervised=True)
+    train_ds = (train_ds
+        .map(_augmentation)
+        .shuffle(buffer_size=10000)
+        .map(_normalize)
+        .batch(args.batch_size, drop_remainder=True))
 
-    train_images = tf.squeeze(train_images)
-    train_labels = train_labels.astype(np.int32)
-    train_ds = tf.data.Dataset.from_tensor_slices((train_images, train_labels))
-    batch_train_ds = train_ds.shuffle(60000).batch(args.batch_size)
-    online_train_ds = train_ds.shuffle(60000).batch(1)
-
-    test_images = test_images.astype(np.float32)
-    test_images = test_images / 255.0
-    test_images = tf.image.per_image_standardization(test_images)
-    test_labels = test_labels.astype(np.int32)
-    test_ds = tf.data.Dataset.from_tensor_slices((test_images, test_labels))
-    test_ds = test_ds.batch(100)
+    test_ds = (test_ds
+        .map(_no_augmentation)
+        .shuffle(buffer_size=10000)
+        .map(_normalize)
+        .batch(32, drop_remainder=True))
 
     class_names = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-    return batch_train_ds, test_ds, class_names
+    return train_ds, test_ds, class_names
+
+
+def _augmentation(x, y):
+    x = tf.image.convert_image_dtype(x, tf.float32)
+    x = tf.image.random_crop(x, size=[HEIGHT, WIDTH, DEPTH])
+    x = tf.image.random_flip_left_right(x)
+    return x, y
+
+
+def _no_augmentation(x, y):
+    x = tf.image.convert_image_dtype(x, tf.float32)
+    x = tf.image.resize_with_crop_or_pad(x, HEIGHT, WIDTH)
+    return x, y
+
+
+def _normalize(x, y):
+    x = tf.image.per_image_standardization(x)
+    y = tf.cast(y, tf.int32)
+    return x, y
