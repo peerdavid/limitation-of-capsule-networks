@@ -20,7 +20,6 @@ import sklearn.metrics
 
 import utils
 from capsule.capsule_network import CapsNet
-from capsule.cnn import CNN
 from capsule.utils import margin_loss
 from data.mnist import create_mnist
 from data.fashion_mnist import create_fashion_mnist
@@ -57,8 +56,6 @@ argparser.add_argument("--dataset", default="mnist",
   help="mnist, fashion_mnist, svhn, norb")
 argparser.add_argument("--routing", default="rba",
   help="rba, em")
-argparser.add_argument("--model", default="cnn",
-  help="capsnet or cnn")
 argparser.add_argument("--layers", default="64,32,32,32,32,32,32,32,10",
   help=", spereated list of layers. Each number represents the number of hidden units except for the first layer the number of channels.")
 argparser.add_argument("--dimensions", default="8,12,12,12,12,12,12,12,16",
@@ -66,16 +63,12 @@ argparser.add_argument("--dimensions", default="8,12,12,12,12,12,12,12,16",
 
 # Load hyperparameters from cmd args and update with json file
 args = argparser.parse_args()
-args.use_reconstruction = False if args.model == "cnn" else args.use_reconstruction
-
 
 def compute_loss(logits, y, reconstruction, x):
-  """ The loss is the sum of the margin loss and the reconstruction loss 
-      as defined in [2]
+  """ The loss is the sum of the margin loss and the reconstruction loss
   """ 
   num_classes = tf.shape(logits)[1]
 
-  # Calculate margin loss
   loss = margin_loss(logits, tf.one_hot(y, num_classes))
   loss = tf.reduce_mean(loss)
 
@@ -117,13 +110,8 @@ def train(train_ds, test_ds, class_names):
   test_writer = tf.summary.create_file_writer("%s/log/test" % args.log_dir)
 
   with strategy.scope():
-    model = CapsNet(args) if args.model == "capsnet" else CNN(args)
+    model = CapsNet(args)
     optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
-    # radam=tfa.optimizers.RectifiedAdam(
-    #         learning_rate=args.learning_rate, 
-    #         epsilon=1e-6,
-    #         weight_decay=1e-2)
-    # optimizer = tfa.optimizers.Lookahead(radam)
     checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
 
     # Define metrics 
