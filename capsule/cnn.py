@@ -24,22 +24,22 @@ class CNN(tf.keras.Model):
         channels = layers[0]
         dim = dimensions[0]
 
-        self.convs.append(tf.keras.layers.Conv2D(filters=channels * dim,
-                                            kernel_size=(7, 7),
-                                            strides=2,
-                                            padding="same",
-                                            activation="relu"))
+        self.convs.append(tf.keras.layers.Conv2D(
+            filters=channels * dim,
+            kernel_size=(7, 7),
+            strides=2,
+            padding="same",
+            activation="relu"))
 
-        for i in range(len(layers)):
-            channels = layers[i]
-            dim = dimensions[i]
-            self.fcs.append(tf.keras.layers.Dense(channels * dim, 
+        for i in range(1, len(layers)):
+            self.fcs.append(tf.keras.layers.Dense(
+                dimensions[i] * layers[i], 
                 activation="relu"))
         
         self.out = tf.keras.layers.Dense(self.num_classes, 
             name="out", 
-            activation="sigmoid",
-            use_bias=self.use_bias) # Similar to the capsnet we ensure values \in [0, 1]
+            activation="linear",
+            use_bias=self.use_bias)
         
         if self.use_reconstruction:
             self.reconstruction_network = ReconstructionNetwork(
@@ -48,6 +48,7 @@ class CNN(tf.keras.Model):
                 in_dim=dimensions[-1],
                 out_dim=args.img_height,
                 img_dim=args.img_depth)
+
 
     def call(self, x, y):
         batch_size = tf.shape(x)[0]
@@ -67,4 +68,5 @@ class CNN(tf.keras.Model):
         # to reconstruct images
         r = self.reconstruction_network(x, y) if self.use_reconstruction else None
         out = self.out(x)
+        out = tf.nn.softmax(out)
         return out, r, layers
