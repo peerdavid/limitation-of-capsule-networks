@@ -42,7 +42,7 @@ argparser.add_argument("--batch_size", default=128, type=int,
   help="Batch size of training data")
 argparser.add_argument("--enable_tf_function", default=True, type=bool, 
   help="Enable tf.function for faster execution")
-argparser.add_argument("--epochs", default=60, type=int, 
+argparser.add_argument("--epochs", default=30, type=int, 
   help="Defines the number of epochs to train the network")
 argparser.add_argument("--use_bias", default=False, type=bool, 
   help="Add a bias term to the preactivation")
