@@ -45,7 +45,7 @@ argparser.add_argument("--enable_tf_function", default=True, type=bool,
   help="Enable tf.function for faster execution")
 argparser.add_argument("--epochs", default=30, type=int, 
   help="Defines the number of epochs to train the network")
-argparser.add_argument("--use_bias", default=False, type=bool, 
+argparser.add_argument("--use_bias", default=True, type=bool, 
   help="Add a bias term to the preactivation")
 argparser.add_argument("--use_reconstruction", default=True, type=bool, 
   help="Use the reconstruction network as regularization loss")
@@ -53,15 +53,15 @@ argparser.add_argument("--test", default=True, type=bool,
   help="Run tests after each epoch?")
 
 # Architecture
-argparser.add_argument("--dataset", default="norb",
+argparser.add_argument("--dataset", default="mnist",
   help="mnist, fashion_mnist, svhn, norb")
 argparser.add_argument("--routing", default="rba",
   help="rba, em")
 argparser.add_argument("--model", default="cnn",
   help="capsnet or cnn")
-argparser.add_argument("--layers", default="64,32,5",
+argparser.add_argument("--layers", default="64,32,32,32,32,32,32,32,10",
   help=", spereated list of layers. Each number represents the number of hidden units except for the first layer the number of channels.")
-argparser.add_argument("--dimensions", default="8,12,16",
+argparser.add_argument("--dimensions", default="8,12,12,12,12,12,12,12,16",
   help=", spereated list of layers. Each number represents the dimension of the layer.")
 
 # Load hyperparameters from cmd args and update with json file
