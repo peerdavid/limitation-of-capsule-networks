@@ -20,6 +20,7 @@ import sklearn.metrics
 
 import utils
 from capsule.capsule_network import CapsNet
+from capsule.cnn import CNN
 from capsule.utils import margin_loss
 from data.mnist import create_mnist
 from data.fashion_mnist import create_fashion_mnist
@@ -56,6 +57,8 @@ argparser.add_argument("--dataset", default="norb",
   help="mnist, fashion_mnist, svhn, norb")
 argparser.add_argument("--routing", default="rba",
   help="rba, em")
+argparser.add_argument("--model", default="cnn",
+  help="capsnet or cnn")
 argparser.add_argument("--layers", default="64,32,5",
   help=", spereated list of layers. Each number represents the number of hidden units except for the first layer the number of channels.")
 argparser.add_argument("--dimensions", default="8,12,16",
@@ -113,7 +116,7 @@ def train(train_ds, test_ds, class_names):
   test_writer = tf.summary.create_file_writer("%s/log/test" % args.log_dir)
 
   with strategy.scope():
-    model = CapsNet(args)
+    model = CapsNet(args) if args.model == "capsnet" else CNN(args)
     optimizer = tf.optimizers.Adam(learning_rate=args.learning_rate)
     # radam=tfa.optimizers.RectifiedAdam(
     #         learning_rate=args.learning_rate, 

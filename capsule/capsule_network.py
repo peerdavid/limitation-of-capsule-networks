@@ -18,7 +18,6 @@ class CapsNet(tf.keras.Model):
         dimensions = list(map(int, args.dimensions.split(","))) if args.dimensions != "" else []
         routing=args.routing
         layers = list(map(int, args.layers.split(","))) if args.layers != "" else []
-        dimensions=dimensions
         use_bias=args.use_bias
         use_reconstruction=args.use_reconstruction
 
