@@ -66,6 +66,7 @@ argparser.add_argument("--dimensions", default="8,12,12,12,12,12,12,12,16",
 
 # Load hyperparameters from cmd args and update with json file
 args = argparser.parse_args()
+args.use_reconstruction = False if args.model == "cnn" else args.use_reconstruction
 
 
 def compute_loss(logits, y, reconstruction, x):
@@ -256,6 +257,7 @@ def main():
   print("\n\n###############################################", flush=True)
   print(args.log_dir, flush=True)
   print("###############################################\n", flush=True)
+
   # Configurations for cluster
   physical_devices = tf.config.experimental.list_physical_devices('GPU')
   assert len(physical_devices) > 0, "Not enough GPU hardware devices available"

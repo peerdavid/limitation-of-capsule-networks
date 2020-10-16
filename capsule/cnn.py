@@ -26,7 +26,7 @@ class CNN(tf.keras.Model):
 
         self.convs.append(tf.keras.layers.Conv2D(
             filters=channels * dim,
-            kernel_size=(7, 7),
+            kernel_size=(9, 9),
             strides=2,
             padding="same",
             activation="relu"))
@@ -40,14 +40,6 @@ class CNN(tf.keras.Model):
             name="out", 
             activation="linear",
             use_bias=self.use_bias)
-        
-        if self.use_reconstruction:
-            self.reconstruction_network = ReconstructionNetwork(
-                name="ReconstructionNetwork",
-                in_capsules=self.num_classes, 
-                in_dim=dimensions[-1],
-                out_dim=args.img_height,
-                img_dim=args.img_depth)
 
 
     def call(self, x, y):
@@ -58,15 +50,10 @@ class CNN(tf.keras.Model):
             x = conv(x)
             layers.append(x)
 
-        # Instead of capsules we use a cnn
         x = tf.reshape(x, [batch_size, -1])
         for fc in self.fcs:
             x = fc(x)
             layers.append(x)
 
-        # The last feature representation (similar to capsules) are used 
-        # to reconstruct images
-        r = self.reconstruction_network(x, y) if self.use_reconstruction else None
         out = self.out(x)
-        out = tf.nn.softmax(out)
-        return out, r, layers
+        return out, None, layers
