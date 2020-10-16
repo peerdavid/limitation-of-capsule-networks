@@ -232,8 +232,8 @@ def train(train_ds, test_ds, class_names):
 
       ####################
       # Checkpointing
-      #if epoch % 60 == 0:
-      #  checkpoint.save(ckpt_dir)
+      if epoch % 15 == 0:
+        checkpoint.save(ckpt_dir)
 
     return max_acc
 
