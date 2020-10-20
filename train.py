@@ -44,7 +44,7 @@ argparser.add_argument("--enable_tf_function", default=True, type=bool,
   help="Enable tf.function for faster execution")
 argparser.add_argument("--epochs", default=30, type=int, 
   help="Defines the number of epochs to train the network")
-argparser.add_argument("--use_bias", default=True, type=bool, 
+argparser.add_argument("--use_bias", default=False, type=bool, 
   help="Add a bias term to the preactivation")
 argparser.add_argument("--use_reconstruction", default=True, type=bool, 
   help="Use the reconstruction network as regularization loss")
